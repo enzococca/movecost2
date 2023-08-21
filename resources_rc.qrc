@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/movecost" >
+        <file>movecost.png</file>
+    </qresource>
+</RCC>
