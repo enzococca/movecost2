@@ -22,7 +22,7 @@
 ##Output_LCPs_netw_merged=output vector
 ##showplots
 # Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster", "rgdal")
+required_packages <- c("movecost", "sp", "progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
 # Define utility function for mapping numbers to strings
@@ -34,7 +34,7 @@ library(sp)
 library(movecost)
 library(progress)
 library(raster)
-library(rgdal)
+
 
 # Define utility function for mapping numbers to strings
 get_string_value <- function(val, string_map) {

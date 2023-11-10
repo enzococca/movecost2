@@ -36,7 +36,7 @@
 
 ##showplots
 # Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster", "rgdal","dplyr")
+required_packages <- c("movecost", "sp", "progress", "raster", "dplyr")
 lapply(required_packages, require, character.only = TRUE)
 
 # Load libraries
@@ -44,7 +44,6 @@ library(sp)
 library(movecost)
 library(progress)
 library(raster)
-library(rgdal)
 library(dplyr)
 # Define utility function for mapping numbers to strings
 get_string_value <- function(val, string_map) {

@@ -21,7 +21,7 @@
 ##Output_Polygon=output vector
 ##showplots
 # Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster", "rgdal")
+required_packages <- c("movecost", "sp", "progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
 # Define utility function for mapping numbers to strings

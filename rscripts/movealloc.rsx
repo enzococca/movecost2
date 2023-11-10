@@ -19,7 +19,7 @@
 ##Output_Polygon=output vector
 ##Output_Alloc_Raster=output raster
 ##showplots
-required_packages <- c("movecost", "sp", "progress", "raster", "rgdal")
+required_packages <- c("movecost", "sp", "progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
 # Define utility function for mapping numbers to strings
