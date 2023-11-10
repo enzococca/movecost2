@@ -6,7 +6,7 @@
 name=movecost
 qgisMinimumVersion=3.0
 description=Rscipt for QGIS for Calculation of Slope-Dependant Accumulated Cost Surface, Least-Cost Paths, and Least-Cost Corridors Related to Human
-version=0.5.0
+version=1.0
 author=Enzo Cocca; Gianmarco Alberti
 email=enzo.ccc@gmail.com
 
