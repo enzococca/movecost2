@@ -1,14 +1,13 @@
-##load_vector_using_rgdal
-##load_raster_using_rgdal
 ##movecost script=group
-##DTM=raster
+##Movecost=name
+##CRS=crs
+##Area_of_interest=raster
 ##Origin=vector point
 ##Destination=vector point
 ##Barrier=optional vector
 ##PlotBarrier=string FALSE
 ##IrregularDTM=string FALSE
-##Movecost=name
-##Move=selection 16;8;4 ;
+##Move=enum literal 16;8;4; ;
 ##Field=number 0
 ##Breaks=number 0.5
 ##Function=selection t;tofp;mp;icmonp;icmoffp;icfonp;icfoffp;ug;ma;alb;gkrs;r;ks;trp;wcs;ree;b;e;p;pcf;m;hrz;vl;ls;a;h ;
@@ -27,7 +26,7 @@
 ##DL=string TRUE
 ##CB=number 0.6
 ##CLL=number 0.6
-##Output_Accum_Cost_Surface=output raster
+##Output_Accumulation_Coast=output raster
 ##Output_Isoline=output vector
 ##Output_LCP=output vector
 ##Output_LCP_Back=output vector
@@ -36,68 +35,66 @@
 
 ##showplots
 # Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster", "dplyr")
+required_packages <- c("movecost", "sp", "sf","progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
+
 
 # Load libraries
 library(sp)
+library(sf)
 library(movecost)
 library(progress)
 library(raster)
-library(dplyr)
+
+
 # Define utility function for mapping numbers to strings
 get_string_value <- function(val, string_map) {
     string_map[val + 1] # +1 because R indexing starts from 1
 }
-
-# Load input raster
-DTM <- raster(DTM)
-
 # Get CRS from input vector (Origin)
-origin_crs <- sp::proj4string(Origin)
+# Assuming 'Origin' is an sf object and you need to get its CRS
+origin_crs <- st_crs(Origin)$proj4string
+origin_sp <- as(Origin, "Spatial")
+destin_sp <- as(Destination, "Spatial")
+studyplot_sp <- raster(Area_of_interest)
 
-# Set CRS for DTM to match Origin's CRS
-raster::crs(DTM) <- origin_crs
-
+summary(studyplot_sp)  # Questo ti darà una panoramica dei dati, inclusi i valori min e max
+any(is.na(studyplot_sp))  # Controlla se ci sono valori NA
+any(studyplot_sp == Inf)  # Controlla se ci sono valori infiniti
+studyplot_sp[is.na(studyplot_sp)] <- 0  # Sostituisce i valori NA con 0
+studyplot_sp[studyplot_sp == Inf] <- max(studyplot_sp, na.rm = TRUE)  # Sostituisce i valori infiniti con il massimo valore non infinito
+print(studyplot_sp)
 # Map numbers to strings using utility function
 function_map <- c("t", "tofp", "mp", "icmonp", "icmoffp", "icfonp", "icfoffp", "ug", "ma", "alb", "gkrs", "r", "ks", "trp", "wcs", "ree", "b", "e", "p", "pcf", "m", "hrz", "vl", "ls", "a", "h")
 Function <- get_string_value(Function, function_map)
-
 time_map <- c("h", "m")
 Time <- get_string_value(Time, time_map)
-# Map numbers to strings using utility function
-move_map <- c(16,8,4)
-Move <- get_string_value(Move, move_map)
+
 Outp_map <- c("r", "c")
 Outp <- get_string_value(Outp, Outp_map)
-
 # Convert string to logical
 PlotBarrier <- as.logical(PlotBarrier)
 # If PlotBarrier is FALSE, set Barrier and Field to NULL
-if(PlotBarrier==TRUE) {
+if(!PlotBarrier) {
   Barrier <- NULL
   Field <- NULL
 } else {
   Move <- 8
 }
+Move<-as.integer(Move)
+print(Move)
 IrregularDTM <- as.logical(IrregularDTM)
 Return_Base <- as.logical(Return_Base)
 Cognitive_Slope <- as.logical(Cognitive_Slope)
 DL <- as.logical(DL)
 CL <- as.logical(CL)
-if (!is.null(Barrier)) {
-  # Il parametro Barrier è stato specificato dall'utente, quindi utilizza il suo valore
-  # Puoi procedere con l'uso di Barrier nel tuo codice
-} else {
-  # Il parametro Barrier non è stato specificato dall'utente, quindi non viene utilizzato
-  # In questo caso, il calcolo sarà eseguito senza considerare la barriera.
-}
-
 # Execute movecost function
 r <- movecost(
-  dtm = DTM,
-  origin = Origin,
-  destin = Destination,  
+  dtm = studyplot_sp,
+  origin = as_Spatial(Origin),
+  destin = as_Spatial(Destination),
+  studyplot=NULL,
+  cogn.slp = Cognitive_Slope,
   plot.barrier = PlotBarrier,
   barrier = Barrier,
   irregular.dtm = IrregularDTM,
@@ -108,7 +105,6 @@ r <- movecost(
   move = Move,
   breaks = Breaks,
   return.base = Return_Base,
-  cogn.slp = Cognitive_Slope,
   sl.crit = Critical_Slope,
   W = Walker_Body_Weight,
   L = Carried_Load_Weight,
@@ -120,85 +116,114 @@ r <- movecost(
   destin.lab = DL,
   cex.breaks = CB,
   cex.lcp.lab = CLL,
-  oneplot = FALSE,
+  oneplot = TRUE,
   export = FALSE
 )
 warnings()
+# Converti l'oggetto sf in Spatial
+#sp_object <- as(Area_of_interest, "Spatial")
 
-dtm_r <- movecost(
-  dtm = DTM,
-  origin = Origin,
-  destin = Destination,
-  
-)
-# Convert raster output to SpatialPixelsDataFrame and write to GeoTIFF
-raster.sp <- as(r$accumulated.cost.raster, "SpatialPixelsDataFrame") 
-# Set the CRS for the Output_Accum_Cost_Surface to match Origin's CRS
-sp::proj4string(raster.sp) <- origin_crs
-Output_Accum_Cost_Surface=raster.sp
 
-a1.sp<-as(r$isolines, "SpatialLinesDataFrame")
-# Set the CRS for the Output_Isoline to match Origin's CRS
-sp::proj4string(a1.sp) <- origin_crs
-Output_Isoline=a1.sp
 
-b1.sp<-as(r$LCPs, "SpatialLinesDataFrame")
-# Set the CRS for the Output_LCP to match Origin's CRS
-sp::proj4string(b1.sp) <- origin_crs
-Output_LCP=b1.sp
-
-if(Return_Base==TRUE) {
-    lback.sp <- as(r$LCPs.back, "SpatialLinesDataFrame")
-    # Set the CRS for the Output_LCP_Back to match Origin's CRS
-    sp::proj4string(lback.sp) <- origin_crs
-    Output_LCP_Back=lback.sp
+acc = r$accumulated.cost.raster
+sf_acc = acc
+# Imposta il CRS se non è definito
+if (is.na(crs(sf_acc))) {
+  crs(sf_acc) <- CRS # esempio con WGS84
 }
 
-if(DL==TRUE) {
-    
-    dd.sp <- as(r$dest.loc.w.cost, "SpatialPointsDataFrame")
-    # Set the CRS for the Output_W_Cost to match Origin's CRS
-    sp::proj4string(dd.sp) <- origin_crs
-    #Output_W_Cost = dd.sp
-    converti_tempo <- function(tempo_giorni) {
-          giorni <- floor(tempo_giorni)
-          ore_decimali <- (tempo_giorni - giorni) * 24
 
-          ore <- floor(ore_decimali)
-          minuti <- floor((ore_decimali - ore) * 60)
-          secondi <- round((ore_decimali * 60 - minuti) * 60)
+Output_Accumulation_Coast=sf_acc
 
-          # Gestione dei plurali per giorni e ore
-          giorni_label <- ifelse(giorni == 1, "giorno", "giorni")
-          ore_label <- ifelse(ore == 1, "ora", "ore")
+a1=r$isolines
+sf_object = st_as_sf(a1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object))) {
+  sf_object <- st_set_crs(sf_object, CRS) # esempio con WGS84
+}
 
-          tempo_convertito <- paste(
-            if (giorni > 0) paste(giorni, giorni_label) else NULL,
-            if (ore > 0) paste(ore, ore_label) else NULL,
-            if (minuti > 0) paste(minuti, "minuti") else NULL,
-            if (secondi > 0) paste(secondi, "secondi") else NULL,
-            sep = " "
-          )
+# Ora esporta il file
+Output_Isoline=sf_object
 
-          return(tempo_convertito)
+
+b1=r$LCPs
+sf_object_b1 = st_as_sf(b1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object_b1))) {
+  sf_object_b1 <- st_set_crs(sf_object_b1, CRS) # esempio con WGS84
+}
+Output_LCP =sf_object_b1
+
+if(Return_Base == TRUE) {
+    lcp=r$LCPs.back
+    sf_object_lcp = st_as_sf(lcp)
+    if (is.na(st_crs(sf_object_lcp))) {
+        sf_object_lcp <- st_set_crs(sf_object_lcp, CRS) # esempio con WGS84
+}
+    Output_LCP_Back = sf_object_lcp
+}
+
+if(DL == TRUE) {
+    dl=r$dest.loc.w.cost
+print(dl)
+    sf_dl=st_as_sf(dl)
+    if (is.na(st_crs(sf_dl))) {
+            sf_dl <- st_set_crs(sf_dl, CRS) # esempio con WGS84
+}
+converti_tempo <- function(tempo_giorni) {
+    if (is.na(tempo_giorni)) {
+        return(NA)  # Return NA if the time in days is NA
     }
 
+    giorni <- floor(tempo_giorni)
+    ore_decimali <- (tempo_giorni - giorni) * 24
 
-    
-    # Converti la colonna cost_hms in numeri
-    dd.sp$cost_hms <- as.numeric(dd.sp$cost_hms)
+    ore <- floor(ore_decimali)
+    minuti_decimali <- (ore_decimali - ore) * 60
+    minuti <- floor(minuti_decimali)
+    secondi <- round((minuti_decimali - minuti) * 60)
 
-    # Verifica se ci sono valori non numerici o mancanti nella colonna
-    valori_non_numerici <- !is.na(dd.sp$cost_hms) & !is.numeric(dd.sp$cost_hms)
+    # Ensure seconds do not exceed 59
+    if (secondi >= 60) {
+        secondi <- 0
+        minuti <- minuti + 1
+    }
+
+    # Ensure minutes do not exceed 59
+    if (minuti >= 60) {
+        minuti <- 0
+        ore <- ore + 1
+    }
+
+    # Plural handling for days and hours
+    giorni_label <- ifelse(giorni == 1, "day", "days")
+    ore_label <- ifelse(ore == 1, "hour", "hours")
+
+    tempo_convertito <- paste(
+        if (!is.na(giorni) && giorni > 0) paste(giorni, giorni_label) else NULL,
+        if (!is.na(ore) && ore > 0) paste(ore, ore_label) else NULL,
+        if (!is.na(minuti) && minuti > 0) paste(minuti, "minutes") else NULL,
+        if (!is.na(secondi) && secondi > 0) paste(sprintf("%02d", secondi), "seconds") else NULL,
+        sep = " "
+    )
+
+    return(tempo_convertito)
+}
+
 
     # Visualizza i valori non numerici o mancanti
-    print(dd.sp[valori_non_numerici, ])
+    valori_non_numerici_o_mancanti <- is.na(sf_dl$cost) | sapply(sf_dl$cost, function(x) !is.numeric(x))
+    print(sf_dl[valori_non_numerici_o_mancanti, ])
 
-    dd.sp$tempo_convertito <- sapply(dd.sp$cost_hms, converti_tempo)
 
-    print(dd.sp)
-    
+    sf_dl$time_converted <- sapply(sf_dl$cost, converti_tempo)
+    print(sf_dl)
+
+
+
     # Assegna il SpatialPointsDataFrame con la colonna aggiunta al tuo Output_W_Cost
-    Output_W_Cost<-dd.sp
-    Output_W_Cost=Output_W_Cost
+    #Output_W_Cost<-sf_dl
+    Output_W_Cost=sf_dl
 }
+
+

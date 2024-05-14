@@ -1,6 +1,5 @@
-##load_vector_using_rgdal
-##load_raster_using_rgdal
 ##movecost script=group
+##CRS=crs
 ##DTM=raster
 ##Origin=vector point
 ##Destination=vector point
@@ -28,34 +27,35 @@
 ##Output_Least_Cost_Corridor=output raster
 ##showplots
 # Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster", "rgdal")
+required_packages <- c("movecost", "sp", "sf","progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
 # Define utility function for mapping numbers to strings
 get_string_value <- function(val, string_map) {
     string_map[val + 1] # +1 because R indexing starts from 1
 }
-
 # Load libraries
 library(sp)
+library(sf)
 library(movecost)
 library(progress)
 library(raster)
-
-
-# Define utility function for mapping numbers to strings
-get_string_value <- function(val, string_map) {
-    string_map[val + 1] # +1 because R indexing starts from 1
-}
 
 # Load input raster
 DTM <- raster(DTM)
 
 # Get CRS from input vector (Origin)
-origin_crs <- sp::proj4string(Origin)
+origin_crs <- CRS
 
-# Set CRS for DTM to match Origin's CRS
 raster::crs(DTM) <- origin_crs
+studyplot_sp <- raster(DTM)
+
+summary(studyplot_sp)  # Questo ti darà una panoramica dei dati, inclusi i valori min e max
+any(is.na(studyplot_sp))  # Controlla se ci sono valori NA
+any(studyplot_sp == Inf)  # Controlla se ci sono valori infiniti
+studyplot_sp[is.na(studyplot_sp)] <- 0  # Sostituisce i valori NA con 0
+studyplot_sp[studyplot_sp == Inf] <- max(studyplot_sp, na.rm = TRUE)  # Sostituisce i valori infiniti con il massimo valore non infinito
+print(studyplot_sp)
 # Mappa i numeri in stringhe utilizzando la funzione di utilità
 function_map <- c("t", "tofp", "mp", "icmonp", "icmoffp", "icfonp", "icfoffp", "ug", "ma", "alb", "gkrs", "r", "ks", "trp", "wcs", "ree", "b", "e", "p", "pcf", "m", "hrz", "vl", "ls", "a", "h")
 Function <- get_string_value(Function, function_map)
@@ -72,7 +72,7 @@ PlotBarrier <- as.logical(PlotBarrier)
 # If PlotBarrier is FALSE, set Barrier and Field to NULL
 if(!PlotBarrier) {
   Barrier <- NULL
- 
+
 } else {
   Move <- 8
 }
@@ -82,9 +82,9 @@ Add_Chart <- as.logical(Add_Chart)
 Use_Corridor <- as.logical(Use_Corridor)
 # Esegui la funzione movecost
 r <- moverank(
-  dtm = DTM,
-  origin = Origin,
-  destin = Destination,
+  dtm = studyplot_sp,
+  origin = as_Spatial(Origin),
+  destin = as_Spatial(Destination),
   studyplot = NULL,
   barrier = Barrier,
   plot.barrier = PlotBarrier,
@@ -92,7 +92,7 @@ r <- moverank(
   funct = Function,
   time = Time,
   lcp.n = LCPN,
-  use.corr=Use_Corridor,  
+  use.corr=Use_Corridor,
   move = Move,
   cogn.slp = Cognitive_Slope,
   sl.crit = Critical_Slope,
@@ -105,14 +105,71 @@ r <- moverank(
   export = FALSE
 )
 
-b1.sp<-as(r$LCPs, "SpatialLinesDataFrame")
-# Set the CRS for the Output_LCP to match Origin's CRS
-sp::proj4string(b1.sp) <- origin_crs
-Output_LCP=b1.sp
+b1=r$LCPs
+sf_object_b1 = st_as_sf(b1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object_b1))) {
+  sf_object_b1 <- st_set_crs(sf_object_b1, CRS) # esempio con WGS84
+}
+
+converti_tempo <- function(tempo_giorni) {
+    if (is.na(tempo_giorni)) {
+        return(NA)  # Return NA if the time in days is NA
+    }
+
+    giorni <- floor(tempo_giorni)
+    ore_decimali <- (tempo_giorni - giorni) * 24
+
+    ore <- floor(ore_decimali)
+    minuti_decimali <- (ore_decimali - ore) * 60
+    minuti <- floor(minuti_decimali)
+    secondi <- round((minuti_decimali - minuti) * 60)
+
+    # Ensure seconds do not exceed 59
+    if (secondi >= 60) {
+        secondi <- 0
+        minuti <- minuti + 1
+    }
+
+    # Ensure minutes do not exceed 59
+    if (minuti >= 60) {
+        minuti <- 0
+        ore <- ore + 1
+    }
+
+    # Plural handling for days and hours
+    giorni_label <- ifelse(giorni == 1, "day", "days")
+    ore_label <- ifelse(ore == 1, "hour", "hours")
+
+    tempo_convertito <- paste(
+        if (!is.na(giorni) && giorni > 0) paste(giorni, giorni_label) else NULL,
+        if (!is.na(ore) && ore > 0) paste(ore, ore_label) else NULL,
+        if (!is.na(minuti) && minuti > 0) paste(minuti, "minutes") else NULL,
+        if (!is.na(secondi) && secondi > 0) paste(sprintf("%02d", secondi), "seconds") else NULL,
+        sep = " "
+    )
+
+    return(tempo_convertito)
+}
+
+
+    # Visualizza i valori non numerici o mancanti
+    valori_non_numerici_o_mancanti <- is.na(sf_object_b1$cost) | sapply(sf_object_b1$cost, function(x) !is.numeric(x))
+    print(sf_object_b1[valori_non_numerici_o_mancanti, ])
+
+
+    sf_object_b1$time_converted <- sapply(sf_object_b1$cost, converti_tempo)
+    print(sf_object_b1)
+    Output_LCP =sf_object_b1
+
 # Convert raster output to SpatialPixelsDataFrame and write to GeoTIFF
 if(Use_Corridor==TRUE) {
     print(r$'least-cost corridor')
-    raster_layer.sp <- as(r$'least-cost corridor',"SpatialPixelsDataFrame")
-    sp::proj4string(raster_layer.sp) <- origin_crs
-    Output_Least_Cost_Corridor=raster_layer.sp
-} 
+    sf_object_lcp <- r$'least-cost corridor'
+    if (is.na(crs(sf_object_lcp))) {
+        crs(sf_object_lcp) <- CRS # esempio con WGS84sf_object_lcp <- st_set_crs(sf_object_lcp, CRS) # esempio con WGS84
+}
+    crs(studyplot_sp)<-crs(sf_object_lcp)
+    sf_object_cropped = mask(sf_object_lcp, studyplot_sp)
+    Output_Least_Cost_Corridor=sf_object_cropped
+}

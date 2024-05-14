@@ -1,7 +1,6 @@
-##load_vector_using_rgdal
-##load_raster_using_rgdal
 ##movecost script=group
 ##Movealloc by Polygon=name
+##CRS=crs
 ##Area_of_interest=vector polygon
 ##Points=vector point
 ##Move=selection 16;8;4 ;
@@ -21,15 +20,13 @@
 ##Output_Polygon=output vector
 ##showplots
 # Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster")
+required_packages <- c("movecost", "sp", "sf","progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
-# Define utility function for mapping numbers to strings
-get_string_value <- function(val, string_map) {
-    string_map[val + 1] # +1 because R indexing starts from 1
-}
+
 # Load libraries
 library(sp)
+library(sf)
 library(movecost)
 library(progress)
 library(raster)
@@ -39,15 +36,12 @@ library(raster)
 get_string_value <- function(val, string_map) {
     string_map[val + 1] # +1 because R indexing starts from 1
 }
-
-# Load input raster
-#DTM <- raster(DTM)
-
 # Get CRS from input vector (Origin)
-origin_crs <- sp::proj4string(Points)
+# Assuming 'Origin' is an sf object and you need to get its CRS
+origin_crs <- CRS
+p <- as_Spatial(Points)
+studyplot_sp <-as_Spatial(Area_of_interest)
 
-# Set CRS for DTM to match Origin's CRS
-#raster::crs(DTM) <- origin_crs
 
 # Map numbers to strings using utility function
 function_map <- c("t", "tofp", "mp", "icmonp", "icmoffp", "icfonp", "icfoffp", "ug", "ma", "alb", "gkrs", "r", "ks", "trp", "wcs", "ree", "b", "e", "p", "pcf", "m", "hrz", "vl", "ls", "a", "h")
@@ -60,22 +54,42 @@ move_map <- c(16,8,4)
 Move <- get_string_value(Move, move_map)
 
 
-r<-movealloc(dtm=NULL, origin=Points, studyplot=Area_of_interest,funct=Function, cogn.slp=Cognitive_Slope,  sl.crit=Critical_Slope,W=Walker_Body_Weight, L=Carried_Load_Weight,N=N, V=Speed, z=Zoom_Level, cont.lab=TRUE, isolines=TRUE, breaks=Breaks, export=FALSE)
+r<-movealloc(dtm=NULL, origin=p, studyplot=studyplot_sp,  move=Move, time=Time,funct=Function, cogn.slp=Cognitive_Slope,  sl.crit=Critical_Slope,W=Walker_Body_Weight, L=Carried_Load_Weight,N=N, V=Speed, z=Zoom_Level, cont.lab=TRUE, isolines=TRUE, breaks=Breaks, export=FALSE)
 
-raster2.sp <- as(r$dtm, "SpatialPixelsDataFrame")
-Output_DTM=raster2.sp
-
-raster.sp <- as(r$cost.allocation.raster, "SpatialPixelsDataFrame") 
-#ras.sp <- crop(raster.sp, Area_of_interest)
-sp::proj4string(raster.sp) <- origin_crs
-Output_Alloc_Raster=raster.sp
-
-a1.sp<-as(r$isolines, "SpatialLinesDataFrame")
-sp::proj4string(a1.sp) <- origin_crs
-Output_Isoline=a1.sp
-
-a2.sp<-as(r$alloc.boundaries, "SpatialPolygonsDataFrame")
-sp::proj4string(a2.sp) <- origin_crs
-Output_Polygon=a2.sp
+dem = r$dtm
+sf_dem = dem
+# Imposta il CRS se non è definito
+if (is.na(crs(sf_dem))) {
+  crs(sf_dem) <- CRS # esempio con WGS84
+}
+crs(studyplot_sp)<-crs(sf_dem)
+sf_dem_cropped = mask(sf_dem, studyplot_sp)
+Output_DTM=sf_dem_cropped
 
 
+raster <- r$cost.allocation.raster
+if (is.na(crs(raster))) {
+  crs(raster) <- CRS # esempio con WGS84
+}
+
+
+Output_Alloc_Raster=raster
+
+a1=r$isolines
+sf_object = st_as_sf(a1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object))) {
+  sf_object <- st_set_crs(sf_object, CRS) # esempio con WGS84
+}
+
+# Ora esporta il file
+Output_Isoline=sf_object
+
+a2<-r$alloc.boundaries
+sf_object2 = st_as_sf(a2)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object2))) {
+  sf_object2 <- st_set_crs(sf_object2, CRS) # esempio con WGS84
+}
+
+Output_Polygon=sf_object2

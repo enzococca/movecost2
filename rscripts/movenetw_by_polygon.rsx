@@ -1,6 +1,6 @@
-##load_vector_using_rgdal
-##load_raster_using_rgdal
 ##movecost script=group
+##Movenetw_by_polygon=name
+##CRS=crs
 ##Area_of_interest=vector polygon
 ##Origin=vector point
 ##Network_type=selection allpairs;neigh ;
@@ -22,8 +22,8 @@
 ##Output_LCPs_netw_merged=output vector
 ##Output_DTM=output raster
 ##showplots
-# Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster")
+
+required_packages <- c("movecost", "sp", "sf","progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
 # Define utility function for mapping numbers to strings
@@ -32,25 +32,22 @@ get_string_value <- function(val, string_map) {
 }
 # Load libraries
 library(sp)
+library(sf)
 library(movecost)
 library(progress)
 library(raster)
 
 
-# Define utility function for mapping numbers to strings
-get_string_value <- function(val, string_map) {
-    string_map[val + 1] # +1 because R indexing starts from 1
-}
 
 # Load input raster
 #DTM <- raster(DTM)
 
 # Get CRS from input vector (Origin)
-origin_crs <- sp::proj4string(Origin)
+origin_crs <- CRS
 
 # Set CRS for DTM to match Origin's CRS
 #raster::crs(DTM) <- origin_crs
-
+studyplot_sp <- as(Area_of_interest, "Spatial")
 # Map numbers to strings using utility function
 function_map <- c("t", "tofp", "mp", "icmonp", "icmoffp", "icfonp", "icfoffp", "ug", "ma", "alb", "gkrs", "r", "ks", "trp", "wcs", "ree", "b", "e", "p", "pcf", "m", "hrz", "vl", "ls", "a", "h")
 Function <- get_string_value(Function, function_map)
@@ -75,8 +72,8 @@ Cognitive_Slope <- as.logical(Cognitive_Slope)
 
 r<-movenetw(
   dtm=NULL, 
-  origin=Origin, 
-  studyplot=Area_of_interest,
+  origin=as_Spatial(Origin),
+  studyplot=as_Spatial(Area_of_interest),
   netw.type=Network_type,
   barrier = Barrier,
   plot.barrier = PlotBarrier,
@@ -100,8 +97,8 @@ if (Network_type == 'allpairs') {
     row.names(df) <- sapply(slot(r$LCPs.netw.merged, "lines"), function(x) slot(x, "ID"))
 
     # Convert SpatialLines to SpatialLinesDataFrame
-    Output_LCPs_netw_merged <- SpatialLinesDataFrame(r$LCPs.netw.merged, data = df)
-    sp::proj4string(Output_LCPs_netw_merged) <- origin_crs
+    Output_LCPs_netw_merged <- st_as_sf(r$LCPs.netw.merged, data = df)
+    st_crs(Output_LCPs_netw_merged) <- origin_crs
   } else {
     # Handle the case where r$LCPs.netw.merged is NULL
     Output_LCPs_netw_merged <- NULL
@@ -114,11 +111,15 @@ if (Network_type == 'allpairs') {
     Output_LCPs_netw=a1# Create empty data.frame with row number equal to the number of SpatialLines
     df <- data.frame(id = seq_along(a1))
 
+
     # Convert SpatialLines to SpatialLinesDataFrame
-    a1_df <- SpatialLinesDataFrame(a1, data = df)
-    sp::proj4string(a1_df) <- origin_crs
+    a1_df <- st_as_sf(a1, data = df)
+    # Imposta il CRS se non è definito
+    if (is.na(st_crs(a1_df))) {
+    a1 <- st_set_crs(a1_df, CRS) # esempio con WGS84
+    }
     # Now a1_df is a SpatialLinesDataFrame
-    Output_LCPs_netw <- a1_df
+    Output_LCPs_netw <- a1
 } else {
   if (!is.null(r$LCPs.netw.neigh.merged)) {
     # Create data.frame with row names matching the line IDs
@@ -126,8 +127,8 @@ if (Network_type == 'allpairs') {
     row.names(df) <- sapply(slot(r$LCPs.netw.neigh.merged, "lines"), function(x) slot(x, "ID"))
 
     # Convert SpatialLines to SpatialLinesDataFrame
-    Output_LCPs_netw_merged <- SpatialLinesDataFrame(r$LCPs.netw.neigh.merged, data = df)
-    sp::proj4string(Output_LCPs_netw_merged) <- origin_crs
+    Output_LCPs_netw_merged <- st_as_sf(r$LCPs.netw.neigh.merged, data = df)
+    st_crs(Output_LCPs_netw_merged) <- origin_crs
   } else {
     # Handle the case where r$LCPs.netw.neigh.merged is NULL
     Output_LCPs_netw_merged <- NULL
@@ -141,11 +142,21 @@ if (Network_type == 'allpairs') {
     df <- data.frame(id = seq_along(a1))
 
     # Convert SpatialLines to SpatialLinesDataFrame
-    a1_df <- SpatialLinesDataFrame(a1, data = df)
-    sp::proj4string(a1_df) <- origin_crs
+    a1_df <- st_as_sf(a1, data = df)
+    # Imposta il CRS se non è definito
+    if (is.na(st_crs(a1_df))) {
+  df <- st_set_crs(a1_df, CRS) # esempio con WGS84
+}
     # Now a1_df is a SpatialLinesDataFrame
     Output_LCPs_netw <- a1_df
 }
 
-raster2.sp <- as(r$dtm, "SpatialPixelsDataFrame")
-Output_DTM=raster2.sp
+dem = r$dtm
+sf_dem = dem
+# Imposta il CRS se non è definito
+if (is.na(crs(sf_dem))) {
+  crs(sf_dem) <- CRS # esempio con WGS84
+}
+crs(studyplot_sp)<-crs(sf_dem)
+sf_dem_cropped = mask(sf_dem, studyplot_sp)
+Output_DTM=sf_dem_cropped

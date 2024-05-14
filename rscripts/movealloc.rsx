@@ -1,7 +1,6 @@
-##load_vector_using_rgdal
-##load_raster_using_rgdal
 ##movecost script=group
 ##Movealloc=name
+##CRS=crs
 ##DTM=raster
 ##Points=vector point
 ##Move=selection 16;8;4 ;
@@ -19,15 +18,15 @@
 ##Output_Polygon=output vector
 ##Output_Alloc_Raster=output raster
 ##showplots
-required_packages <- c("movecost", "sp", "progress", "raster")
+
+# Load required libraries
+required_packages <- c("movecost", "sp", "sf","progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
-# Define utility function for mapping numbers to strings
-get_string_value <- function(val, string_map) {
-    string_map[val + 1] # +1 because R indexing starts from 1
-}
+
 # Load libraries
 library(sp)
+library(sf)
 library(movecost)
 library(progress)
 library(raster)
@@ -37,15 +36,20 @@ library(raster)
 get_string_value <- function(val, string_map) {
     string_map[val + 1] # +1 because R indexing starts from 1
 }
-
-# Load input raster
-DTM <- raster(DTM)
-
 # Get CRS from input vector (Origin)
-origin_crs <- sp::proj4string(Points)
+# Assuming 'Origin' is an sf object and you need to get its CRS
+origin_crs <- CRS
+p <- as_Spatial(Points)
+studyplot_sp <- raster(DTM)
+crs(studyplot_sp) <- origin_crs
+summary(studyplot_sp)  # Questo ti darà una panoramica dei dati, inclusi i valori min e max
+any(is.na(studyplot_sp))  # Controlla se ci sono valori NA
+any(studyplot_sp == Inf)  # Controlla se ci sono valori infiniti
+studyplot_sp[is.na(studyplot_sp)] <- 0  # Sostituisce i valori NA con 0
+studyplot_sp[studyplot_sp == Inf] <- max(studyplot_sp, na.rm = TRUE)  # Sostituisce i valori infiniti con il massimo valore non infinito
+print(studyplot_sp)
 
-# Set CRS for DTM to match Origin's CRS
-raster::crs(DTM) <- origin_crs
+
 # Map numbers to strings using utility function
 function_map <- c("t", "tofp", "mp", "icmonp", "icmoffp", "icfonp", "icfoffp", "ug", "ma", "alb", "gkrs", "r", "ks", "trp", "wcs", "ree", "b", "e", "p", "pcf", "m", "hrz", "vl", "ls", "a", "h")
 Function <- get_string_value(Function, function_map)
@@ -55,18 +59,32 @@ Time <- get_string_value(Time, time_map)
 # Map numbers to strings using utility function
 move_map <- c(16,8,4)
 Move <- get_string_value(Move, move_map)
-r<-movealloc(dtm=DTM, origin=Points, studyplot=NULL,funct=Function, cogn.slp=Cognitive_Slope,  sl.crit=Critical_Slope,W=Walker_Body_Weight, L=Carried_Load_Weight,N=N, V=Speed, z=Zoom_Level, cont.lab=TRUE, isolines=TRUE, breaks=Breaks, export=FALSE)
+r<-movealloc(dtm=studyplot_sp, origin=p, studyplot=NULL,funct=Function, cogn.slp=Cognitive_Slope,  sl.crit=Critical_Slope,W=Walker_Body_Weight, L=Carried_Load_Weight,N=N, V=Speed, z=Zoom_Level, cont.lab=TRUE, isolines=TRUE, breaks=Breaks, export=FALSE)
 
 
-raster.sp <- as(r$cost.allocation.raster, "SpatialPixelsDataFrame") 
-#ras.sp <- crop(raster.sp, Area_of_interest)
-sp::proj4string(raster.sp) <- origin_crs
-Output_Alloc_Raster=raster.sp
+raster <- r$cost.allocation.raster
+if (is.na(crs(raster))) {
+  crs(raster) <- CRS # esempio con WGS84
+}
 
-a1.sp<-as(r$isolines, "SpatialLinesDataFrame")
-sp::proj4string(a1.sp) <- origin_crs
-Output_Isoline=a1.sp
 
-a2.sp<-as(r$alloc.boundaries, "SpatialPolygonsDataFrame")
-sp::proj4string(a2.sp) <- origin_crs
-Output_Polygon=a2.sp
+Output_Alloc_Raster=raster
+
+a1=r$isolines
+sf_object = st_as_sf(a1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object))) {
+  sf_object <- st_set_crs(sf_object, CRS) # esempio con WGS84
+}
+
+# Ora esporta il file
+Output_Isoline=sf_object
+
+a2<-r$alloc.boundaries
+sf_object2 = st_as_sf(a2)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object2))) {
+  sf_object2 <- st_set_crs(sf_object2, CRS) # esempio con WGS84
+}
+
+Output_Polygon=sf_object2

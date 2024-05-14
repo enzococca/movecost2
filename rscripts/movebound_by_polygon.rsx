@@ -1,6 +1,6 @@
-##load_vector_using_rgdal
-##load_raster_using_rgdal
+
 ##movecost script=group
+##CRS=crs
 ##Area_of_interest=vector polygon
 ##Points=vector point
 ##Movebound by Polygon=name
@@ -21,17 +21,16 @@
 ##Zoom_Level=number 9
 ##Output_DTM=output raster
 ##Output_Isoline=output vector
+##Output_Area=output vector
 ##showplots
 # Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster")
+required_packages <- c("movecost", "sp", "sf","progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
-# Define utility function for mapping numbers to strings
-get_string_value <- function(val, string_map) {
-    string_map[val + 1] # +1 because R indexing starts from 1
-}
+
 # Load libraries
 library(sp)
+library(sf)
 library(movecost)
 library(progress)
 library(raster)
@@ -41,15 +40,11 @@ library(raster)
 get_string_value <- function(val, string_map) {
     string_map[val + 1] # +1 because R indexing starts from 1
 }
-
-# Load input raster
-#DTM <- raster(DTM)
-
 # Get CRS from input vector (Origin)
-origin_crs <- sp::proj4string(Points)
-
-# Set CRS for DTM to match Origin's CRS
-#raster::crs(DTM) <- origin_crs
+# Assuming 'Origin' is an sf object and you need to get its CRS
+origin_crs <- CRS
+p <- as_Spatial(Points)
+studyplot_sp <- as_Spatial(Area_of_interest)
 
 # Map numbers to strings using utility function
 function_map <- c("t", "tofp", "mp", "icmonp", "icmoffp", "icfonp", "icfoffp", "ug", "ma", "alb", "gkrs", "r", "ks", "trp", "wcs", "ree", "b", "e", "p", "pcf", "m", "hrz", "vl", "ls", "a", "h")
@@ -71,39 +66,56 @@ if(!PlotBarrier) {
 }
 
 Cognitive_Slope <- as.logical(Cognitive_Slope)
-r<-movebound(dtm=NULL, 
-  origin=Points, 
-  studyplot=Area_of_interest,
+r<-movebound(dtm=NULL,
+  origin=p,
+  studyplot=studyplot_sp,
   barrier = Barrier,
   plot.barrier = PlotBarrier,
   field = Field,
-  funct=Function, 
-  time=Time, move=Move, 
-  cont.value=Cost_Value, 
-  cogn.slp=Cognitive_Slope,  
+  funct=Function,
+  time=Time, move=Move,
+  cont.value=Cost_Value,
+  cogn.slp=Cognitive_Slope,
   sl.crit=Critical_Slope,
-  W=Walker_Body_Weight, 
+  W=Walker_Body_Weight,
   L=Carried_Load_Weight,
-  N=N, V=Speed, 
-  z=Zoom_Level, 
+  N=N,
+  V=Speed,
+  z=Zoom_Level,
   cont.lab=TRUE,
-  add.geom=Area, 
+  add.geom=Area,
   export=FALSE)
 
+dem = r$dtm
+sf_dem = dem
+# Imposta il CRS se non è definito
+if (is.na(crs(sf_dem))) {
+  crs(sf_dem) <- CRS # esempio con WGS84
+}
+crs(studyplot_sp)<-crs(sf_dem)
+sf_dem_cropped = mask(sf_dem, studyplot_sp)
+Output_DTM=sf_dem_cropped
 
-a1.sp<-as(r$isolines, "SpatialLinesDataFrame")
-# Set the CRS for the Output_Isoline to match Origin's CRS
-sp::proj4string(a1.sp) <- origin_crs
-Output_Isoline=a1.sp
-raster2.sp <- as(r$dtm, "SpatialPixelsDataFrame") 
-#sp::proj4string(raster2) <- origin_crs
-#ras2.sp <- crop(raster2.sp, Area_of_interest)
-Output_DTM=raster2.sp
+a1=r$isolines
+sf_object = st_as_sf(a1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object))) {
+  sf_object <- st_set_crs(sf_object, CRS) # esempio con WGS84
+}
+
+# Ora esporta il file
+Output_Isoline=sf_object
 
 if(Area==TRUE){
 
-a2.sp<-as(r$origin_w_isolines_geom,'SpatialPointsDataFrame')
-##Output_Area=output vector
-sp::proj4string(a2.sp) <- origin_crs
-Output_Area=a2.sp
+a2<-r$origin_w_isolines_geom
+sf_object2 = st_as_sf(a2)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object2))) {
+  sf_object2 <- st_set_crs(sf_object2, CRS) # esempio con WGS84
 }
+
+# Ora esporta il file
+Output_Area=sf_object2
+}
+traceback()

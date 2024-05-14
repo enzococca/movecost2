@@ -1,7 +1,6 @@
-##load_vector_using_rgdal
-##load_raster_using_rgdal
 ##movecost script=group
 ##Movecorr=name
+##CRS=crs
 ##DTM=raster
 ##Points=vector point
 ##Selection_ID_Point_A=number 1
@@ -20,8 +19,6 @@
 ##N=number 1
 ##Speed=number 1
 ##Zoom_Level=number 9
-
-
 ##Output_LC_corridor=output raster
 ##Output_Accum_Cost_Surface_A=output raster
 ##Output_Accum_Cost_Surface_B=output raster
@@ -31,29 +28,37 @@
 
 
 ##showplots
-# Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster", "dplyr")
+required_packages <- c("movecost", "sp", "sf","progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
-# Load libraries
-library(sp)
-library(movecost)
-library(progress)
-library(raster)
-library(dplyr)
 # Define utility function for mapping numbers to strings
 get_string_value <- function(val, string_map) {
     string_map[val + 1] # +1 because R indexing starts from 1
 }
+# Load libraries
+library(sp)
+library(sf)
+library(movecost)
+library(progress)
+library(raster)
+
 
 # Load input raster
 DTM <- raster(DTM)
-
+print(DTM)
 # Get CRS from input vector (Origin)
-origin_crs <- sp::proj4string(Points)
+origin_crs <- CRS
 
 # Set CRS for DTM to match Origin's CRS
-raster::crs(DTM) <- origin_crs
+crs(DTM) <- origin_crs
+studyplot_sp <- DTM
+
+summary(studyplot_sp)  # Questo ti darà una panoramica dei dati, inclusi i valori min e max
+any(is.na(studyplot_sp))  # Controlla se ci sono valori NA
+any(studyplot_sp == Inf)  # Controlla se ci sono valori infiniti
+studyplot_sp[is.na(studyplot_sp)] <- 0  # Sostituisce i valori NA con 0
+studyplot_sp[studyplot_sp == Inf] <- max(studyplot_sp, na.rm = TRUE)  # Sostituisce i valori infiniti con il massimo valore non infinito
+print(studyplot_sp)
 
 # Map numbers to strings using utility function
 function_map <- c("t", "tofp", "mp", "icmonp", "icmoffp", "icfonp", "icfoffp", "ug", "ma", "alb", "gkrs", "r", "ks", "trp", "wcs", "ree", "b", "e", "p", "pcf", "m", "hrz", "vl", "ls", "a", "h")
@@ -76,30 +81,59 @@ if(PlotBarrier==TRUE) {
 IrregularDTM <- as.logical(IrregularDTM)
 
 Cognitive_Slope <- as.logical(Cognitive_Slope)
-	
-r<-movecorr(a=Points[Selection_ID_Point_A,],b=Points[Selection_ID_Point_B,],plot.barrier = PlotBarrier,
+p<-as_Spatial(Points)
+r<-movecorr(dtm=studyplot_sp,a=p[Selection_ID_Point_A,],b=p[Selection_ID_Point_B,],plot.barrier = PlotBarrier,
   barrier = Barrier,
   irregular.dtm = IrregularDTM,
-  field = Field,funct=Function,time=Time,move=Move,dtm=DTM,cogn.slp=Cognitive_Slope,sl.crit=Critical_Slope,W=Walker_Body_Weight,L=Carried_Load_Weight,N=N,V=Speed,z=Zoom_Level)
+  field = Field,funct=Function,time=Time,move=Move,cogn.slp=Cognitive_Slope,sl.crit=Critical_Slope,W=Walker_Body_Weight,L=Carried_Load_Weight,N=N,V=Speed,z=Zoom_Level)
+
+print(r)
+
+LC<- r$lc.corridor
+if (is.na(crs(LC))) {
+        crs(LC) <- CRS # esempio con WGS84sf_object_lcp <- st_set_crs(sf_object_lcp, CRS) # esempio con WGS84
+}
+crs(studyplot_sp)<-crs(LC)
+LC_cropped = mask(LC, studyplot_sp)
+Output_LC_corridor=LC_cropped
 
 
-LC.sp<- as(r$lc.corridor, "SpatialPixelsDataFrame") 
-sp::proj4string(LC.sp) <- origin_crs
-Output_LC_corridor=LC.sp
 
-raster.sp <- as(r$accum_cost_surf_a, "SpatialPixelsDataFrame") 
-sp::proj4string(raster.sp) <- origin_crs
-Output_Accum_Cost_Surface_A=raster.sp
+raster <- r$accum_cost_surf_a
+if (is.na(crs(raster))) {
+        crs(raster) <- CRS # esempio con WGS84sf_object_lcp <- st_set_crs(sf_object_lcp, CRS) # esempio con WGS84
+}
+crs(studyplot_sp)<-crs(raster)
+raster_cropped = mask(raster, studyplot_sp)
+Output_Accum_Cost_Surface_A=raster_cropped
 
-raster2.sp <- as(r$accum_cost_surf_b, "SpatialPixelsDataFrame") 
-sp::proj4string(raster2.sp) <- origin_crs
-Output_Accum_Cost_Surface_B=raster2.sp
+raster2 <- r$accum_cost_surf_b
+if (is.na(crs(raster2))) {
+        crs(raster2) <- CRS # esempio con WGS84sf_object_lcp <- st_set_crs(sf_object_lcp, CRS) # esempio con WGS84
+}
+crs(studyplot_sp)<-crs(raster2)
+raster2_cropped = mask(raster2, studyplot_sp)
+Output_Accum_Cost_Surface_B=raster2_cropped
 
-a1.sp<-as(r$lcp_a_to_b, "SpatialLinesDataFrame")
-sp::proj4string(a1.sp) <- origin_crs
-Output_LCP_A_to_B=a1.sp
 
-b1.sp<-as(r$lcp_b_to_a, "SpatialLinesDataFrame")
-sp::proj4string(b1.sp) <- origin_crs
-Output_LCP_B_to_A=b1.sp
 
+
+a1=r$lcp_a_to_b
+sf_object_b1 = st_as_sf(a1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object_b1))) {
+  sf_object_b1 <- st_set_crs(sf_object_b1, CRS) # esempio con WGS84
+}
+
+
+Output_LCP_A_to_B =sf_object_b1
+
+b1=r$lcp_b_to_a
+sf_object_b1 = st_as_sf(b1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object_b1))) {
+  sf_object_b1 <- st_set_crs(sf_object_b1, CRS) # esempio con WGS84
+}
+
+Output_LCP_B_to_A =sf_object_b1
+traceback()

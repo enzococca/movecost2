@@ -1,9 +1,9 @@
-##load_vector_using_rgdal
-##load_raster_using_rgdal
+
 ##movecost script=group
+##Movebound=name
+##CRS=crs
 ##DTM=raster
 ##Points=vector point
-##Movebound=name
 ##Barrier=optional vector
 ##PlotBarrier=string FALSE
 ##Area=string TRUE
@@ -18,19 +18,18 @@
 ##N=number 1
 ##Speed=number 1
 ##Zoom_Level=number 9
-##Output_Isoline=output vector
 
+##Output_Isoline=output vector
+##Output_Area=output vector
 ##showplots
 # Load required libraries
-required_packages <- c("movecost", "sp", "progress", "raster")
+required_packages <- c("movecost", "sp", "sf","progress", "raster")
 lapply(required_packages, require, character.only = TRUE)
 
-# Define utility function for mapping numbers to strings
-get_string_value <- function(val, string_map) {
-    string_map[val + 1] # +1 because R indexing starts from 1
-}
+
 # Load libraries
 library(sp)
+library(sf)
 library(movecost)
 library(progress)
 library(raster)
@@ -40,15 +39,18 @@ library(raster)
 get_string_value <- function(val, string_map) {
     string_map[val + 1] # +1 because R indexing starts from 1
 }
-
-# Load input raster
-DTM <- raster(DTM)
-
 # Get CRS from input vector (Origin)
-origin_crs <- sp::proj4string(Points)
-
-# Set CRS for DTM to match Origin's CRS
-raster::crs(DTM) <- origin_crs
+# Assuming 'Origin' is an sf object and you need to get its CRS
+origin_crs <- CRS
+p <- as_Spatial(Points)
+studyplot_sp <- raster(DTM)
+crs(studyplot_sp) <- origin_crs
+summary(studyplot_sp)  # Questo ti darà una panoramica dei dati, inclusi i valori min e max
+any(is.na(studyplot_sp))  # Controlla se ci sono valori NA
+any(studyplot_sp == Inf)  # Controlla se ci sono valori infiniti
+studyplot_sp[is.na(studyplot_sp)] <- 0  # Sostituisce i valori NA con 0
+studyplot_sp[studyplot_sp == Inf] <- max(studyplot_sp, na.rm = TRUE)  # Sostituisce i valori infiniti con il massimo valore non infinito
+print(studyplot_sp)
 
 # Map numbers to strings using utility function
 function_map <- c("t", "tofp", "mp", "icmonp", "icmoffp", "icfonp", "icfoffp", "ug", "ma", "alb", "gkrs", "r", "ks", "trp", "wcs", "ree", "b", "e", "p", "pcf", "m", "hrz", "vl", "ls", "a", "h")
@@ -72,8 +74,8 @@ if(!PlotBarrier) {
 
 Cognitive_Slope <- as.logical(Cognitive_Slope)
 Area <- as.logical(Area)
-r<-movebound(dtm=DTM, 
-  origin=Points, 
+r<-movebound(dtm=studyplot_sp,
+  origin=p,
   barrier = Barrier,
   plot.barrier = PlotBarrier,
   field = Field,
@@ -91,15 +93,25 @@ r<-movebound(dtm=DTM,
   export=FALSE)
 
 
-a1.sp<-as(r$isolines, "SpatialLinesDataFrame")
-# Set the CRS for the Output_Isoline ##Output_Isoline=output vectorto match Origin's CRS
-sp::proj4string(a1.sp) <- origin_crs
-Output_Isoline=a1.sp
+a1=r$isolines
+sf_object = st_as_sf(a1)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object))) {
+  sf_object <- st_set_crs(sf_object, CRS) # esempio con WGS84
+}
+
+# Ora esporta il file
+Output_Isoline=sf_object
 
 if(Area==TRUE){
 
-a2.sp<-as(r$origin_w_isolines_geom,'SpatialPointsDataFrame')
-##Output_Area=output vector
-sp::proj4string(a2.sp) <- origin_crs
-Output_Area=a2.sp
+a2<-r$origin_w_isolines_geom
+sf_object2 = st_as_sf(a2)
+# Imposta il CRS se non è definito
+if (is.na(st_crs(sf_object2))) {
+  sf_object2 <- st_set_crs(sf_object2, CRS) # esempio con WGS84
+}
+
+# Ora esporta il file
+Output_Area=sf_object2
 }
