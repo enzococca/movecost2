@@ -23,6 +23,7 @@
 """
 
 import os
+import shutil
 
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
@@ -104,13 +105,25 @@ class MOVECOSTDialog(QtWidgets.QDialog, FORM_CLASS):
         folder = str(os.path.join(userFolder(), "rscripts"))
         mkdir(folder)
         return os.path.abspath(folder)
-    
-    def on_pushButton_add_script_pressed(self):# Paths to source files and qgis profile directory
-        
-        profile_home = QgsApplication.qgisSettingsDirPath()
-        source_profile = os.path.join(profile_home,'python', 'plugins', 'movecost', 'rscripts')
-        rs=os.path.join(profile_home,'processing','rscripts')
 
-        # The acutal "copy" with or without overwrite (update)
-        ##if button_pressed == QMessageBox.Yes:
-        copy_tree(source_profile,rs)
+    def on_pushButton_add_script_pressed(self):
+        # Paths to source files and QGIS profile directory
+        profile_home = QgsApplication.qgisSettingsDirPath()
+        source_profile = os.path.join(profile_home, 'python', 'plugins', 'movecost', 'rscripts')
+        rs = os.path.join(profile_home, 'processing', 'rscripts')
+
+        # Check if the destination directory exists, create it if not
+        if not os.path.exists(rs):
+            os.makedirs(rs)
+
+        # Copy each file individually to allow overwriting
+        for filename in os.listdir(source_profile):
+            source_file = os.path.join(source_profile, filename)
+            dest_file = os.path.join(rs, filename)
+
+            # Copy and overwrite the file
+            shutil.copy2(source_file, dest_file)
+
+        # Alternatively, using copy_tree from distutils.dir_util
+        # This will also overwrite files
+        copy_tree(source_profile, rs)
